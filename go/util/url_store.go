@@ -3,6 +3,7 @@ package util
 import (
 	"math/rand"
 	"net/url"
+	"time"
 
 	"github.com/dgraph-io/badger"
 	"github.com/pkg/errors"
@@ -21,8 +22,17 @@ var base62Lut = []byte{
 	'Y', 'Z',
 }
 
-const MAX_URL_LEN = 1 << 13
-const MAX_RESERVE_NUM = 1 << 14
+const (
+	MAX_URL_LEN          = 1 << 13
+	MAX_RESERVE_NUM      = 1 << 16
+	MAX_KEY_NUM          = 3_521_614_606_208 // 62^7
+	RESERVE_EXPIRY       = time.Hour * 24
+	CACHE_RESERVE_EXPIRY = time.Hour * 16
+)
+
+func genKey() uint64 {
+	return uint64(rand.Int63n(MAX_KEY_NUM))
+}
 
 // encodes ret with num coverted to a base62 number in reverse
 // ret is cleared before use
@@ -50,14 +60,14 @@ func NewURLStore(path string) (ret *URLStore, err error) {
 
 // Store stores the url in DB, returning the created key
 func (store *URLStore) Store(urlStr string) (string, error) {
-	if !validateUrl(urlStr) {
+	if !ValidateUrl(urlStr) {
 		return "", errors.Errorf("Invalid url: %s", urlStr)
 	}
 	key := make([]byte, 0, 7)
 	err := store.db.Update(func(txn *badger.Txn) error {
-		base62Encode(rand.Uint64(), &key)
+		base62Encode(genKey(), &key)
 		for _, err := txn.Get(key); err != badger.ErrKeyNotFound; {
-			base62Encode(rand.Uint64(), &key)
+			base62Encode(genKey(), &key)
 		}
 		err := txn.Set(key, []byte(urlStr))
 		return err
@@ -95,18 +105,20 @@ func (store *URLStore) Query(key string) (string, error) {
 // to a cache server so that the cache server can serve both create
 // and query requests
 func (store *URLStore) Reserve(num int) ([]string, error) {
-	if num <= 0 || num >= MAX_RESERVE_NUM {
+	if num <= 0 || num > MAX_RESERVE_NUM {
 		return []string{}, errors.Errorf("Invalid num %d\n", num)
 	}
 	ret := make([]string, 0, num)
 	err := store.db.Update(func(txn *badger.Txn) error {
 		key := make([]byte, 0, 7)
 		for i := 0; i < num; i++ {
-			base62Encode(rand.Uint64(), &key)
+			base62Encode(genKey(), &key)
 			for _, err := txn.Get(key); err != badger.ErrKeyNotFound; {
-				base62Encode(rand.Uint64(), &key)
+				base62Encode(genKey(), &key)
 			}
-			err := txn.Set(key, []byte(""))
+			e := badger.NewEntry(key, []byte(""))
+			e.ExpiresAt = uint64(time.Now().Add(RESERVE_EXPIRY).Unix())
+			err := txn.SetEntry(e)
 			if err != nil {
 				return err
 			}
@@ -120,38 +132,19 @@ func (store *URLStore) Reserve(num int) ([]string, error) {
 	return ret, nil
 }
 
-// Ensures that the keys have no '?' etc. that would interfere with
-// url shortener functionality
-func validateKey(key string) bool {
-	for _, c := range key {
-		if !(c >= '0' && c <= '9' || c >= 'A' && c <= 'Z' || c >= 'a' && c <= 'z') {
-			return false
-		}
-	}
-	return true
-}
-
-func validateUrl(urlStr string) bool {
-	if len(urlStr) > MAX_URL_LEN {
-		return false
-	}
-	u, err := url.Parse(urlStr)
-	return err == nil && u.Scheme != "" && u.Host != ""
-}
-
-// Set sets a shortened url key to the url, if the key is not in
-// use. This is primarily for cache servers to use with their reserved keys
-func (store *URLStore) Set(key string, urlStr string) error {
-	if !validateKey(key) {
+// SetReserve sets a shortened url key to the url, if the key is not in
+// use. This is for cache servers to use with their reserved keys
+func (store *URLStore) SetReserve(key string, urlStr string) error {
+	if !ValidateKey(key) {
 		return errors.Errorf("Invalid key: %s", key)
 	}
-	if !validateUrl(urlStr) {
+	if !ValidateUrl(urlStr) {
 		return errors.Errorf("Invalid url: %s", urlStr)
 	}
 	keyBytes := []byte(key)
 	err := store.db.Update(func(txn *badger.Txn) error {
-		if v, err := txn.Get(keyBytes); !(err == badger.ErrKeyNotFound || v.ValueSize() == 0) {
-			return errors.Errorf("Attempted to set key that already exists: %s", key)
+		if v, err := txn.Get(keyBytes); err == badger.ErrKeyNotFound || v.ValueSize() != 0 {
+			return errors.Errorf("Invalid cache key: %s", key)
 		}
 		err := txn.Set(keyBytes, []byte(urlStr))
 		return err
@@ -160,4 +153,22 @@ func (store *URLStore) Set(key string, urlStr string) error {
 		return err
 	}
 	return nil
+}
+
+// Ensures that the keys are alphanumeric
+func ValidateKey(key string) bool {
+	for _, c := range key {
+		if !(c >= '0' && c <= '9' || c >= 'A' && c <= 'Z' || c >= 'a' && c <= 'z') {
+			return false
+		}
+	}
+	return true
+}
+
+func ValidateUrl(urlStr string) bool {
+	if len(urlStr) > MAX_URL_LEN {
+		return false
+	}
+	u, err := url.Parse(urlStr)
+	return err == nil && u.Scheme != "" && u.Host != ""
 }

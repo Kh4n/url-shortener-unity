@@ -1,3 +1,4 @@
 .vscode
 *.exe
 /go/main-server/db
+__debug*
