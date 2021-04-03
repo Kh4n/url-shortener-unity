@@ -1,19 +1,27 @@
-package main
+package shortener
 
 import (
 	"fmt"
 	"log"
 	"net/http"
-	"path"
 	"strconv"
+)
 
-	"github.com/Kh4n/url-shortener-unity/go/util"
+const (
+	SHORTEN_ENDPOINT    = "/api/shorten"
+	QUERY_ENDPOINT      = "/api/query"
+	RESERVE_ENDPOINT    = "/api/reserve"
+	SETRESERVE_ENDPOINT = "/api/setReserve"
+
+	REDIRECT_STATUS = http.StatusMovedPermanently
 )
 
 type MainServer struct {
-	store *util.URLStore
-	mux   *http.ServeMux
-	port  uint32
+	store *URLStore
+
+	port uint32
+	mux  *http.ServeMux
+	home http.Handler
 }
 
 func NewMainServer(dbLocation string, port uint32) (*MainServer, error) {
@@ -22,19 +30,25 @@ func NewMainServer(dbLocation string, port uint32) (*MainServer, error) {
 		port: port,
 	}
 	var err error
-	ret.store, err = util.NewURLStore(dbLocation)
+	ret.store, err = NewURLStore(dbLocation)
 	if err != nil {
 		return nil, err
 	}
 
 	ret.mux.HandleFunc("/", ret.redirect)
-	ret.mux.HandleFunc("/shorten", ret.shorten)
-	ret.mux.HandleFunc("/query", ret.query)
+	ret.mux.HandleFunc(SHORTEN_ENDPOINT, ret.shorten)
+	ret.mux.HandleFunc(QUERY_ENDPOINT, ret.query)
 
-	ret.mux.HandleFunc("/reserve", ret.reserve)
-	ret.mux.HandleFunc("/setReserve", ret.setReserve)
+	ret.mux.HandleFunc(RESERVE_ENDPOINT, ret.reserve)
+	ret.mux.HandleFunc(SETRESERVE_ENDPOINT, ret.setReserve)
+
+	ret.home = http.FileServer(http.Dir("./web"))
 
 	return ret, nil
+}
+
+func (ms *MainServer) Close() error {
+	return ms.store.Close()
 }
 
 func (ms *MainServer) Start() error {
@@ -43,9 +57,9 @@ func (ms *MainServer) Start() error {
 }
 
 func (ms *MainServer) redirect(w http.ResponseWriter, r *http.Request) {
-	key := path.Base(r.URL.Path)
-	if key == "/" {
-		w.Write([]byte("create a post request to /shorten to use"))
+	key := r.URL.Path[1:]
+	if !ValidKey(key) {
+		ms.home.ServeHTTP(w, r)
 		return
 	}
 	url, err := ms.store.Query(key)
@@ -53,11 +67,11 @@ func (ms *MainServer) redirect(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	http.Redirect(w, r, url, http.StatusFound)
+	http.Redirect(w, r, url, REDIRECT_STATUS)
 }
 
 func (ms *MainServer) shorten(w http.ResponseWriter, r *http.Request) {
-	resp := util.SetShortenQueryResponse{}
+	resp := SetShortenQueryResponse{}
 	err := r.ParseForm()
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
@@ -75,11 +89,11 @@ func (ms *MainServer) shorten(w http.ResponseWriter, r *http.Request) {
 		resp.Key = key
 		resp.OriginalURL = urlStr
 	}
-	util.WriteJSON(w, resp)
+	WriteJSON(w, resp)
 }
 
 func (ms *MainServer) setReserve(w http.ResponseWriter, r *http.Request) {
-	resp := util.SetShortenQueryResponse{}
+	resp := SetShortenQueryResponse{}
 	err := r.ParseForm()
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
@@ -97,11 +111,11 @@ func (ms *MainServer) setReserve(w http.ResponseWriter, r *http.Request) {
 		resp.Succeeded = true
 		resp.OriginalURL = urlStr
 	}
-	util.WriteJSON(w, resp)
+	WriteJSON(w, resp)
 }
 
 func (ms *MainServer) reserve(w http.ResponseWriter, r *http.Request) {
-	resp := util.ReserveResponse{}
+	resp := ReserveResponse{}
 	err := r.ParseForm()
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
@@ -122,11 +136,11 @@ func (ms *MainServer) reserve(w http.ResponseWriter, r *http.Request) {
 	} else {
 		resp.Succeeded = true
 	}
-	util.WriteJSON(w, resp)
+	WriteJSON(w, resp)
 }
 
 func (ms *MainServer) query(w http.ResponseWriter, r *http.Request) {
-	resp := util.SetShortenQueryResponse{}
+	resp := SetShortenQueryResponse{}
 	err := r.ParseForm()
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
@@ -143,5 +157,5 @@ func (ms *MainServer) query(w http.ResponseWriter, r *http.Request) {
 		resp.Succeeded = true
 		resp.OriginalURL = url
 	}
-	util.WriteJSON(w, resp)
+	WriteJSON(w, resp)
 }

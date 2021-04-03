@@ -1,4 +1,7 @@
-.vscode
 *.exe
-/go/main-server/db
+db
 __debug*
+debug.test
+
+/.vscode
+/bin

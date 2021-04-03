@@ -1,12 +1,12 @@
-package util
+package shortener
 
 import (
+	"fmt"
 	"math/rand"
 	"net/url"
 	"time"
 
 	"github.com/dgraph-io/badger"
-	"github.com/pkg/errors"
 )
 
 // go does not support constant arrays. this should never be modified
@@ -58,10 +58,14 @@ func NewURLStore(path string) (ret *URLStore, err error) {
 	return ret, nil
 }
 
+func (store *URLStore) Close() error {
+	return store.db.Close()
+}
+
 // Store stores the url in DB, returning the created key
 func (store *URLStore) Store(urlStr string) (string, error) {
-	if !ValidateUrl(urlStr) {
-		return "", errors.Errorf("Invalid url: %s", urlStr)
+	if !ValidUrl(urlStr) {
+		return "", fmt.Errorf("invalid url: %s", urlStr)
 	}
 	key := make([]byte, 0, 7)
 	err := store.db.Update(func(txn *badger.Txn) error {
@@ -90,8 +94,10 @@ func (store *URLStore) Query(key string) (string, error) {
 			ret = string(val)
 			return nil
 		})
-		if err != nil || len(ret) == 0 {
+		if err != nil {
 			return err
+		} else if len(ret) == 0 {
+			return fmt.Errorf("key reserved for cache server: %s", key)
 		}
 		return nil
 	})
@@ -106,7 +112,7 @@ func (store *URLStore) Query(key string) (string, error) {
 // and query requests
 func (store *URLStore) Reserve(num int) ([]string, error) {
 	if num <= 0 || num > MAX_RESERVE_NUM {
-		return []string{}, errors.Errorf("Invalid num %d\n", num)
+		return []string{}, fmt.Errorf("invalid num %d", num)
 	}
 	ret := make([]string, 0, num)
 	err := store.db.Update(func(txn *badger.Txn) error {
@@ -135,16 +141,16 @@ func (store *URLStore) Reserve(num int) ([]string, error) {
 // SetReserve sets a shortened url key to the url, if the key is not in
 // use. This is for cache servers to use with their reserved keys
 func (store *URLStore) SetReserve(key string, urlStr string) error {
-	if !ValidateKey(key) {
-		return errors.Errorf("Invalid key: %s", key)
+	if !ValidKey(key) {
+		return fmt.Errorf("invalid key: %s", key)
 	}
-	if !ValidateUrl(urlStr) {
-		return errors.Errorf("Invalid url: %s", urlStr)
+	if !ValidUrl(urlStr) {
+		return fmt.Errorf("invalid url: %s", urlStr)
 	}
 	keyBytes := []byte(key)
 	err := store.db.Update(func(txn *badger.Txn) error {
 		if v, err := txn.Get(keyBytes); err == badger.ErrKeyNotFound || v.ValueSize() != 0 {
-			return errors.Errorf("Invalid cache key: %s", key)
+			return fmt.Errorf("invalid cache key: %s", key)
 		}
 		err := txn.Set(keyBytes, []byte(urlStr))
 		return err
@@ -156,16 +162,16 @@ func (store *URLStore) SetReserve(key string, urlStr string) error {
 }
 
 // Ensures that the keys are alphanumeric
-func ValidateKey(key string) bool {
+func ValidKey(key string) bool {
 	for _, c := range key {
 		if !(c >= '0' && c <= '9' || c >= 'A' && c <= 'Z' || c >= 'a' && c <= 'z') {
 			return false
 		}
 	}
-	return true
+	return len(key) > 0
 }
 
-func ValidateUrl(urlStr string) bool {
+func ValidUrl(urlStr string) bool {
 	if len(urlStr) > MAX_URL_LEN {
 		return false
 	}

@@ -1,18 +1,15 @@
-package main
+package shortener
 
 import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io/ioutil"
 	"log"
 	"net/http"
 	"net/url"
-	"path"
 	"sync"
 	"time"
 
-	"github.com/Kh4n/url-shortener-unity/go/util"
 	"github.com/bradfitz/gomemcache/memcache"
 )
 
@@ -24,7 +21,7 @@ const (
 	KEY_404    uint32 = 0
 	KEY_EXISTS uint32 = 1
 
-	KEY_404_EXPIRE = 60
+	KEY_404_EXPIRE = 60 // seconds
 )
 
 type cacheKey struct {
@@ -57,8 +54,9 @@ func (ks *KeyStack) Pop() (cacheKey, error) {
 
 type CacheServer struct {
 	mc     *memcache.Client
-	client *http.Client
 	mux    *http.ServeMux
+	client *http.Client
+	home   http.Handler
 
 	port       uint32
 	mainServer string
@@ -66,7 +64,7 @@ type CacheServer struct {
 	ks         KeyStack
 }
 
-func NewCacheServer(memcacheAddr, mainServerAddr string, port, reserveAmt uint32) *CacheServer {
+func NewCacheServer(memcacheAddr, mainServerAddr string, port, reserveAmt uint32) (*CacheServer, error) {
 	ret := &CacheServer{
 		mc:     memcache.New(memcacheAddr),
 		client: &http.Client{},
@@ -77,8 +75,21 @@ func NewCacheServer(memcacheAddr, mainServerAddr string, port, reserveAmt uint32
 		mainServer: mainServerAddr,
 	}
 	ret.mux.HandleFunc("/", ret.redirect)
-	ret.mux.HandleFunc("/shorten", ret.shorten)
-	return ret
+	ret.mux.HandleFunc(SHORTEN_ENDPOINT, ret.shorten)
+
+	ret.home = http.FileServer(http.Dir("./web"))
+
+	err := CheckAll([]string{
+		mainServerAddr,
+		mainServerAddr + SHORTEN_ENDPOINT,
+		mainServerAddr + QUERY_ENDPOINT,
+		mainServerAddr + RESERVE_ENDPOINT,
+		mainServerAddr + SETRESERVE_ENDPOINT,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("unable to connect to main server: %s", err)
+	}
+	return ret, nil
 }
 
 func (cs *CacheServer) Start() error {
@@ -86,38 +97,24 @@ func (cs *CacheServer) Start() error {
 }
 
 func (cs *CacheServer) redirect(w http.ResponseWriter, r *http.Request) {
-	key := path.Base(r.URL.Path)
-	if key == "/" {
-		w.Write([]byte("create a post request to /shorten to use"))
+	key := r.URL.Path[1:]
+	if !ValidKey(key) {
+		cs.home.ServeHTTP(w, r)
 		return
 	}
 	urlIt, err := cs.mc.Get(key)
 	if err == nil {
-		if urlIt.Flags == 1 {
-			http.Redirect(w, r, string(urlIt.Value), http.StatusFound)
+		if urlIt.Flags == KEY_EXISTS {
+			http.Redirect(w, r, string(urlIt.Value), REDIRECT_STATUS)
 		} else {
 			http.NotFound(w, r)
 		}
 		return
 	}
-	resp, err := cs.client.PostForm(cs.mainServer+"/query", url.Values{"key": {key}})
+	jsonResp, err := PostSetShortenQuery(cs.client, cs.mainServer+QUERY_ENDPOINT, url.Values{"key": {key}})
 	if err != nil {
-		log.Printf("Internal server error sending request: %s\n", err.Error())
-		http.Error(w, "Internal server error sending request", http.StatusInternalServerError)
-		return
-	}
-	defer resp.Body.Close()
-	body, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		log.Printf("Internal server error parsing server response: %s\n", err.Error())
-		http.Error(w, "Internal server error parsing server response", http.StatusInternalServerError)
-		return
-	}
-	var jsonResp util.SetShortenQueryResponse
-	err = json.Unmarshal(body, &jsonResp)
-	if err != nil {
-		log.Printf("Internal server error parsing JSON: %s\n", err.Error())
-		http.Error(w, "Internal server error parsing JSON", http.StatusInternalServerError)
+		log.Printf("Internal server error parsing response: %s\n", err.Error())
+		http.Error(w, "Internal server error parsing response", http.StatusInternalServerError)
 		return
 	}
 	err = cs.cacheResp(&jsonResp)
@@ -127,7 +124,7 @@ func (cs *CacheServer) redirect(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if jsonResp.Succeeded {
-		http.Redirect(w, r, jsonResp.OriginalURL, http.StatusFound)
+		http.Redirect(w, r, jsonResp.OriginalURL, REDIRECT_STATUS)
 	} else {
 		http.NotFound(w, r)
 	}
@@ -142,12 +139,24 @@ func (cs *CacheServer) shorten(w http.ResponseWriter, r *http.Request) {
 	}
 
 	urlStr := r.Form.Get("url")
+	if !ValidUrl(urlStr) {
+		resp := SetShortenQueryResponse{
+			Succeeded:   false,
+			Key:         "",
+			OriginalURL: urlStr,
+			ErrorMsg:    fmt.Sprintf("Invalid url: %s", urlStr),
+		}
+		WriteJSON(w, resp)
+		return
+	}
 	key, err := cs.ks.Pop()
 	if err == nil && key.expiry > time.Now().Unix() {
 		go func() {
 			jsonResp, err := cs.setReserve(key.key, urlStr)
-			if err != nil || !jsonResp.Succeeded {
-				log.Printf("Internal server error pushing shorten: %s %s\n", err.Error(), jsonResp.ErrorMsg)
+			if err != nil {
+				log.Printf("Internal server error pushing shorten: %s\n", err.Error())
+			} else if !jsonResp.Succeeded {
+				log.Printf("Internal server error pushing shorten: %s\n", jsonResp.ErrorMsg)
 			}
 		}()
 		err = cs.cacheKey(key.key, urlStr, KEY_EXISTS)
@@ -156,12 +165,12 @@ func (cs *CacheServer) shorten(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "Internal server error caching key", http.StatusInternalServerError)
 			return
 		}
-		resp := util.SetShortenQueryResponse{
+		resp := SetShortenQueryResponse{
 			Succeeded:   true,
 			Key:         key.key,
 			OriginalURL: urlStr,
 		}
-		util.WriteJSON(w, resp)
+		WriteJSON(w, resp)
 		return
 	}
 	go func() {
@@ -179,22 +188,18 @@ func (cs *CacheServer) shorten(w http.ResponseWriter, r *http.Request) {
 	if jsonResp.Succeeded {
 		cs.cacheResp(&jsonResp)
 	}
-	util.WriteJSON(w, jsonResp)
+	WriteJSON(w, jsonResp)
 }
 
 func (cs *CacheServer) reserveKeys() error {
-	resp, err := cs.client.PostForm(
-		cs.mainServer+"/reserve",
-		url.Values{"num": {fmt.Sprintf("%d", cs.reserveAmt)}})
+	body, err := ReadPost(
+		cs.client, cs.mainServer+RESERVE_ENDPOINT,
+		url.Values{"num": {fmt.Sprintf("%d", cs.reserveAmt)}},
+	)
 	if err != nil {
 		return err
 	}
-	defer resp.Body.Close()
-	body, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		return err
-	}
-	var jsonResp util.ReserveResponse
+	var jsonResp ReserveResponse
 	err = json.Unmarshal(body, &jsonResp)
 	if err != nil {
 		return err
@@ -205,50 +210,36 @@ func (cs *CacheServer) reserveKeys() error {
 	newKeys := make([]cacheKey, 0, len(jsonResp.Keys))
 	for i := 0; i < len(jsonResp.Keys); i++ {
 		newKeys = append(newKeys, cacheKey{
-			jsonResp.Keys[i], time.Now().Add(util.CACHE_RESERVE_EXPIRY).Unix(),
+			jsonResp.Keys[i], time.Now().Add(CACHE_RESERVE_EXPIRY).Unix(),
 		})
 	}
 	cs.ks.PushAll(newKeys)
 	return nil
 }
 
-func (cs *CacheServer) pushShorten(urlStr string) (util.SetShortenQueryResponse, error) {
-	resp, err := cs.client.PostForm(cs.mainServer+"/shorten", url.Values{"url": {urlStr}})
+func (cs *CacheServer) pushShorten(urlStr string) (SetShortenQueryResponse, error) {
+	jsonResp, err := PostSetShortenQuery(
+		cs.client, cs.mainServer+SHORTEN_ENDPOINT,
+		url.Values{"url": {urlStr}},
+	)
 	if err != nil {
-		return util.SetShortenQueryResponse{}, err
-	}
-	defer resp.Body.Close()
-	body, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		return util.SetShortenQueryResponse{}, err
-	}
-	var jsonResp util.SetShortenQueryResponse
-	err = json.Unmarshal(body, &jsonResp)
-	if err != nil {
-		return util.SetShortenQueryResponse{}, err
+		return SetShortenQueryResponse{}, err
 	}
 	return jsonResp, nil
 }
 
-func (cs *CacheServer) setReserve(key, urlStr string) (util.SetShortenQueryResponse, error) {
-	resp, err := cs.client.PostForm(cs.mainServer+"/setReserve", url.Values{"key": {key}, "url": {urlStr}})
+func (cs *CacheServer) setReserve(key, urlStr string) (SetShortenQueryResponse, error) {
+	jsonResp, err := PostSetShortenQuery(
+		cs.client, cs.mainServer+SETRESERVE_ENDPOINT,
+		url.Values{"key": {key}, "url": {urlStr}},
+	)
 	if err != nil {
-		return util.SetShortenQueryResponse{}, err
-	}
-	defer resp.Body.Close()
-	body, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		return util.SetShortenQueryResponse{}, err
-	}
-	var jsonResp util.SetShortenQueryResponse
-	err = json.Unmarshal(body, &jsonResp)
-	if err != nil {
-		return util.SetShortenQueryResponse{}, err
+		return SetShortenQueryResponse{}, err
 	}
 	return jsonResp, nil
 }
 
-func (cs *CacheServer) cacheResp(jsonResp *util.SetShortenQueryResponse) error {
+func (cs *CacheServer) cacheResp(jsonResp *SetShortenQueryResponse) error {
 	if jsonResp.Succeeded {
 		return cs.cacheKey(jsonResp.Key, jsonResp.OriginalURL, KEY_EXISTS)
 	}
@@ -258,7 +249,7 @@ func (cs *CacheServer) cacheResp(jsonResp *util.SetShortenQueryResponse) error {
 func (cs *CacheServer) cacheKey(key, urlStr string, keyResponse uint32) error {
 	var expire int32 = 0
 	if keyResponse == KEY_404 {
-		expire = 60
+		expire = KEY_404_EXPIRE
 	}
 	err := cs.mc.Set(&memcache.Item{
 		Key: key, Value: []byte(urlStr),
