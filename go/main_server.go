@@ -52,7 +52,7 @@ func (ms *MainServer) Close() error {
 }
 
 func (ms *MainServer) Start() error {
-	log.Println("Starting server on :8080")
+	log.Printf("Starting server on :%d\n", ms.port)
 	return http.ListenAndServe(fmt.Sprintf(":%d", ms.port), ms.mux)
 }
 
