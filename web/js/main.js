@@ -1,3 +1,4 @@
+// I despise JS
 document.addEventListener("DOMContentLoaded", function() {
     document.getElementById("submit").addEventListener("click", shorten, false)
 })

@@ -21,7 +21,7 @@ const (
 	KEY_404    uint32 = 0
 	KEY_EXISTS uint32 = 1
 
-	KEY_404_EXPIRE = 60 // seconds
+	KEY_404_EXPIRE = 10 // seconds
 )
 
 type cacheKey struct {
@@ -29,6 +29,7 @@ type cacheKey struct {
 	expiry int64
 }
 
+//KeyStack: thread safe stack
 type KeyStack struct {
 	stack []cacheKey
 	lock  sync.Mutex
@@ -102,6 +103,7 @@ func (cs *CacheServer) redirect(w http.ResponseWriter, r *http.Request) {
 		cs.home.ServeHTTP(w, r)
 		return
 	}
+	// first check our cache
 	urlIt, err := cs.mc.Get(key)
 	if err == nil {
 		if urlIt.Flags == KEY_EXISTS {
@@ -111,6 +113,7 @@ func (cs *CacheServer) redirect(w http.ResponseWriter, r *http.Request) {
 		}
 		return
 	}
+	// query the main server if we have a cache miss
 	jsonResp, err := PostSetShortenQuery(cs.client, cs.mainServer+QUERY_ENDPOINT, url.Values{"key": {key}})
 	if err != nil {
 		log.Printf("Internal server error parsing response: %s\n", err.Error())
@@ -139,6 +142,7 @@ func (cs *CacheServer) shorten(w http.ResponseWriter, r *http.Request) {
 	}
 
 	urlStr := r.Form.Get("url")
+	// validate url early as opposed to asking main server to validate it
 	if !ValidUrl(urlStr) {
 		resp := SetShortenQueryResponse{
 			Succeeded:   false,
@@ -150,7 +154,11 @@ func (cs *CacheServer) shorten(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	key, err := cs.ks.Pop()
+	// can't use expired keys as the main server has reclaimed them
 	if err == nil && key.expiry > time.Now().Unix() {
+		// we still need to update the main server, but that can be done
+		// asynchronously. this means that other cache servers will not
+		// immediately experience the changes until the main server receives this request
 		go func() {
 			jsonResp, err := cs.setReserve(key.key, urlStr)
 			if err != nil {
@@ -179,6 +187,8 @@ func (cs *CacheServer) shorten(w http.ResponseWriter, r *http.Request) {
 			log.Printf("Internal server error: %s\n", err.Error())
 		}
 	}()
+	// update the main server, synchronously this time as we have to wait
+	// for a response in order to serve the request
 	jsonResp, err := cs.pushShorten(urlStr)
 	if err != nil {
 		log.Printf("Internal server error pushing shorten: %s\n", err.Error())
@@ -210,6 +220,7 @@ func (cs *CacheServer) reserveKeys() error {
 	newKeys := make([]cacheKey, 0, len(jsonResp.Keys))
 	for i := 0; i < len(jsonResp.Keys); i++ {
 		newKeys = append(newKeys, cacheKey{
+			// only hold keys for 16 hours
 			jsonResp.Keys[i], time.Now().Add(CACHE_RESERVE_EXPIRY).Unix(),
 		})
 	}
@@ -248,6 +259,10 @@ func (cs *CacheServer) cacheResp(jsonResp *SetShortenQueryResponse) error {
 
 func (cs *CacheServer) cacheKey(key, urlStr string, keyResponse uint32) error {
 	var expire int32 = 0
+	// we can still cache 404, just with a short expiry
+	// this expiry could be much longer, but as the keys get used up
+	// it becomes more and more likely an invalid key becomes valid
+	// it would be frustrating for a user to make a shortened url and for it not to work immediately
 	if keyResponse == KEY_404 {
 		expire = KEY_404_EXPIRE
 	}

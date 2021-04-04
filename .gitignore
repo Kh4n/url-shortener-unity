@@ -2,6 +2,9 @@
 db
 __debug*
 debug.test
+*.tfstate*
+sensitive.auto.tfvars
 
-/.vscode
+.vscode
+.terraform
 /bin

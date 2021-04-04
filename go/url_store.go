@@ -24,8 +24,11 @@ var base62Lut = []byte{
 
 const (
 	MAX_URL_LEN          = 1 << 13
-	MAX_RESERVE_NUM      = 1 << 16
+	MAX_RESERVE_NUM      = 1 << MAX_RESERVE_NUM_BITS
+	MAX_RESERVE_NUM_BITS = 16
 	MAX_KEY_NUM          = 3_521_614_606_208 // 62^7
+
+	// caches have an 8 hour margin to be safe
 	RESERVE_EXPIRY       = time.Hour * 24
 	CACHE_RESERVE_EXPIRY = time.Hour * 16
 )
@@ -69,6 +72,7 @@ func (store *URLStore) Store(urlStr string) (string, error) {
 	}
 	key := make([]byte, 0, 7)
 	err := store.db.Update(func(txn *badger.Txn) error {
+		// keep generating keys until we find an unused one
 		base62Encode(genKey(), &key)
 		for _, err := txn.Get(key); err != badger.ErrKeyNotFound; {
 			base62Encode(genKey(), &key)
@@ -94,6 +98,7 @@ func (store *URLStore) Query(key string) (string, error) {
 			ret = string(val)
 			return nil
 		})
+		// empty keys are generated via a "reserve" api call
 		if err != nil {
 			return err
 		} else if len(ret) == 0 {
@@ -123,6 +128,7 @@ func (store *URLStore) Reserve(num int) ([]string, error) {
 				base62Encode(genKey(), &key)
 			}
 			e := badger.NewEntry(key, []byte(""))
+			// set an expiration date so that we don't waste keys if a cache server goes down
 			e.ExpiresAt = uint64(time.Now().Add(RESERVE_EXPIRY).Unix())
 			err := txn.SetEntry(e)
 			if err != nil {

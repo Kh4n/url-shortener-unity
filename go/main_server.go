@@ -57,7 +57,9 @@ func (ms *MainServer) Start() error {
 }
 
 func (ms *MainServer) redirect(w http.ResponseWriter, r *http.Request) {
+	// take off leading forward slash
 	key := r.URL.Path[1:]
+	// if the key isn't valid, just file serve it. will 404 appropriately
 	if !ValidKey(key) {
 		ms.home.ServeHTTP(w, r)
 		return
@@ -67,6 +69,9 @@ func (ms *MainServer) redirect(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
+	// REDIRECT_STATUS should be http.StatusMovedPermanently
+	// if in the future we don't store urls forever, this may need to be changed
+	// bit.ly uses this status code, however
 	http.Redirect(w, r, url, REDIRECT_STATUS)
 }
 
@@ -123,7 +128,7 @@ func (ms *MainServer) reserve(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	num, err := strconv.ParseUint(r.Form.Get("num"), 10, 13)
+	num, err := strconv.ParseUint(r.Form.Get("num"), 10, MAX_RESERVE_NUM_BITS)
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
 		w.Write([]byte("400 - Bad Request"))
