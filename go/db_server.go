@@ -18,16 +18,12 @@ const (
 
 type MainServer struct {
 	store *URLStore
-
-	port uint32
-	mux  *http.ServeMux
-	home http.Handler
+	mux   *http.ServeMux
 }
 
-func NewMainServer(dbLocation string, port uint32) (*MainServer, error) {
+func NewMainServer(dbLocation string) (*MainServer, error) {
 	ret := &MainServer{
-		mux:  http.NewServeMux(),
-		port: port,
+		mux: http.NewServeMux(),
 	}
 	var err error
 	ret.store, err = NewURLStore(dbLocation)
@@ -35,14 +31,11 @@ func NewMainServer(dbLocation string, port uint32) (*MainServer, error) {
 		return nil, err
 	}
 
-	ret.mux.HandleFunc("/", ret.redirect)
 	ret.mux.HandleFunc(SHORTEN_ENDPOINT, ret.shorten)
 	ret.mux.HandleFunc(QUERY_ENDPOINT, ret.query)
 
 	ret.mux.HandleFunc(RESERVE_ENDPOINT, ret.reserve)
 	ret.mux.HandleFunc(SETRESERVE_ENDPOINT, ret.setReserve)
-
-	ret.home = http.FileServer(http.Dir("./web"))
 
 	return ret, nil
 }
@@ -51,28 +44,9 @@ func (ms *MainServer) Close() error {
 	return ms.store.Close()
 }
 
-func (ms *MainServer) Start() error {
-	log.Printf("Starting server on :%d\n", ms.port)
-	return http.ListenAndServe(fmt.Sprintf(":%d", ms.port), ms.mux)
-}
-
-func (ms *MainServer) redirect(w http.ResponseWriter, r *http.Request) {
-	// take off leading forward slash
-	key := r.URL.Path[1:]
-	// if the key isn't valid, just file serve it. will 404 appropriately
-	if !ValidKey(key) {
-		ms.home.ServeHTTP(w, r)
-		return
-	}
-	url, err := ms.store.Query(key)
-	if err != nil {
-		http.NotFound(w, r)
-		return
-	}
-	// REDIRECT_STATUS should be http.StatusMovedPermanently
-	// if in the future we don't store urls forever, this may need to be changed
-	// bit.ly uses this status code, however
-	http.Redirect(w, r, url, REDIRECT_STATUS)
+func (ms *MainServer) Start(port uint) error {
+	log.Printf("Starting db server on :%d\n", port)
+	return http.ListenAndServe(fmt.Sprintf(":%d", port), ms.mux)
 }
 
 func (ms *MainServer) shorten(w http.ResponseWriter, r *http.Request) {

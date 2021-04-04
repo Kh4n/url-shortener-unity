@@ -1,9 +1,9 @@
 *.exe
-db
 __debug*
 debug.test
 *.tfstate*
 sensitive.auto.tfvars
+badger-db
 
 .vscode
 .terraform

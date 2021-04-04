@@ -23,13 +23,17 @@ type ReserveResponse struct {
 }
 
 func WriteJSON(w http.ResponseWriter, data interface{}) {
-	js, err := json.Marshal(data)
+	raw, err := json.Marshal(data)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+	WriteRawJSON(w, raw)
+}
+
+func WriteRawJSON(w http.ResponseWriter, raw []byte) {
 	w.Header().Set("Content-Type", "application/json")
-	w.Write(js)
+	w.Write(raw)
 }
 
 func ReadPost(client *http.Client, addr string, args url.Values) ([]byte, error) {
@@ -45,15 +49,15 @@ func ReadPost(client *http.Client, addr string, args url.Values) ([]byte, error)
 	return body, nil
 }
 
-func PostSetShortenQuery(client *http.Client, addr string, args url.Values) (SetShortenQueryResponse, error) {
+func PostSetShortenQuery(client *http.Client, addr string, args url.Values) (SetShortenQueryResponse, []byte, error) {
 	body, err := ReadPost(client, addr, args)
 	if err != nil {
-		return SetShortenQueryResponse{}, err
+		return SetShortenQueryResponse{}, nil, err
 	}
 	var jsonResp SetShortenQueryResponse
 	err = json.Unmarshal(body, &jsonResp)
 	if err != nil {
-		return SetShortenQueryResponse{}, err
+		return SetShortenQueryResponse{}, nil, err
 	}
-	return jsonResp, nil
+	return jsonResp, body, nil
 }

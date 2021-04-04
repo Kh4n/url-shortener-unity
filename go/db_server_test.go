@@ -73,7 +73,7 @@ func CheckJSONResponse(t *testing.T, jsonResp interface{}, target interface{}) {
 
 func TestMainServerBasic(t *testing.T) {
 	testDB := "./test_db"
-	server, err := NewMainServer(testDB, 0)
+	server, err := NewMainServer(testDB)
 	if err != nil {
 		t.Errorf("Unable to create test server: %s", err.Error())
 	}
@@ -158,15 +158,6 @@ func TestMainServerBasic(t *testing.T) {
 				Key:         key,
 				OriginalURL: exampleUrl,
 			})
-
-			rec = RecordGet(server.mux, "/"+key, url.Values{})
-			if rec.Result().StatusCode != REDIRECT_STATUS {
-				t.Errorf("Expected redirect status %d, got %d", REDIRECT_STATUS, rec.Result().StatusCode)
-			}
-			rec = RecordGet(server.mux, "/BADKEY", url.Values{})
-			if rec.Result().StatusCode != http.StatusNotFound {
-				t.Errorf("Expected redirect status not found, got %d", rec.Result().StatusCode)
-			}
 			wg.Done()
 		}()
 	}

@@ -8,14 +8,14 @@ import (
 )
 
 func main() {
-	port := flag.Int("port", 8080, "the port to run the server on. defaults to 8080")
+	port := flag.Int("port", 8082, "the port to run the server on")
 	flag.Parse()
 	if *port < 0 {
 		log.Fatalf("Port must be >= 0")
 	}
-	server, err := shortener.NewMainServer("./db", uint32(*port))
+	server, err := shortener.NewMainServer("./badger-db")
 	if err != nil {
 		log.Fatalf("Error starting server: %s\n", err.Error())
 	}
-	log.Fatal(server.Start())
+	log.Fatal(server.Start(uint(*port)))
 }
