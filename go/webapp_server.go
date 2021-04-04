@@ -17,15 +17,15 @@ type WebappServer struct {
 	backendServer string
 }
 
-func NewWebappServer(backendServer string) (*WebappServer, error) {
+func NewWebappServer(backendServerHost string) (*WebappServer, error) {
 	ret := &WebappServer{
 		mux:    http.NewServeMux(),
 		client: &http.Client{},
 		home:   http.FileServer(http.Dir("./web")),
 
-		backendServer: backendServer,
+		backendServer: fmt.Sprintf("http://%s", backendServerHost),
 	}
-	proxy, err := SimplePostForwarder(backendServer)
+	proxy, err := SimplePostForwarder(ret.backendServer)
 	if err != nil {
 		return nil, fmt.Errorf("error creating webapp server: %s", err.Error())
 	}
@@ -33,7 +33,7 @@ func NewWebappServer(backendServer string) (*WebappServer, error) {
 	ret.mux.HandleFunc("/", ret.redirect)
 	ret.mux.HandleFunc(SHORTEN_ENDPOINT, proxy.ServeHTTP)
 
-	err = CheckUrl(backendServer)
+	err = CheckUrl(ret.backendServer)
 	if err != nil {
 		return nil, fmt.Errorf("could not connect to backend server: %s", err.Error())
 	}

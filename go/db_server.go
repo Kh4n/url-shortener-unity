@@ -31,8 +31,8 @@ func NewMainServer(dbLocation string) (*MainServer, error) {
 		return nil, err
 	}
 
-	ret.mux.HandleFunc(SHORTEN_ENDPOINT, ret.shorten)
 	ret.mux.HandleFunc(QUERY_ENDPOINT, ret.query)
+	ret.mux.HandleFunc(SHORTEN_ENDPOINT, ret.shorten)
 
 	ret.mux.HandleFunc(RESERVE_ENDPOINT, ret.reserve)
 	ret.mux.HandleFunc(SETRESERVE_ENDPOINT, ret.setReserve)

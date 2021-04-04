@@ -63,24 +63,24 @@ type CacheServer struct {
 	ks         KeyStack
 }
 
-func NewCacheServer(memcacheAddr, dbServerAddr string, reserveAmt uint32) (*CacheServer, error) {
+func NewCacheServer(memcacheHost, dbServerHost string, reserveAmt uint32) (*CacheServer, error) {
 	ret := &CacheServer{
-		mc:     memcache.New(memcacheAddr),
+		mc:     memcache.New(memcacheHost),
 		client: &http.Client{},
 		mux:    http.NewServeMux(),
 
 		reserveAmt: reserveAmt,
-		dbServer:   dbServerAddr,
+		dbServer:   fmt.Sprintf("http://%s", dbServerHost),
 	}
 	ret.mux.HandleFunc(QUERY_ENDPOINT, ret.query)
 	ret.mux.HandleFunc(SHORTEN_ENDPOINT, ret.shorten)
 
 	err := CheckAll([]string{
-		dbServerAddr,
-		SingleJoiningSlash(dbServerAddr, SHORTEN_ENDPOINT),
-		SingleJoiningSlash(dbServerAddr, QUERY_ENDPOINT),
-		SingleJoiningSlash(dbServerAddr, RESERVE_ENDPOINT),
-		SingleJoiningSlash(dbServerAddr, SETRESERVE_ENDPOINT),
+		ret.dbServer,
+		SingleJoiningSlash(ret.dbServer, SHORTEN_ENDPOINT),
+		SingleJoiningSlash(ret.dbServer, QUERY_ENDPOINT),
+		SingleJoiningSlash(ret.dbServer, RESERVE_ENDPOINT),
+		SingleJoiningSlash(ret.dbServer, SETRESERVE_ENDPOINT),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("unable to connect to main server: %s", err)
@@ -169,7 +169,11 @@ func (cs *CacheServer) shorten(w http.ResponseWriter, r *http.Request) {
 			Key:         key.key,
 			OriginalURL: urlStr,
 		}
-		raw, _ := json.Marshal(resp)
+		raw, err := json.Marshal(resp)
+		if err != nil {
+			log.Printf("Internal server error marshalling response: %s\n", err.Error())
+			http.Error(w, "Internal server error marshalling response", http.StatusInternalServerError)
+		}
 		err = cs.cacheResp(raw, &resp)
 		if err != nil {
 			log.Printf("Internal server error caching key: %s\n", err.Error())

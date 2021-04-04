@@ -9,14 +9,14 @@ import (
 
 func main() {
 	port := flag.Int("port", 8080, "the port to run the server on")
-	flag.Parse()
 	if *port < 0 {
 		log.Fatalf("Port must be >= 0")
 	}
-	backendServerAddr := flag.String(
-		"backendServerAddr", "http://localhost:8081", "the address of the backend server (cache or db)",
+	backendServerHost := flag.String(
+		"backendServerHost", "localhost:8081", "the host of the backend server (cache or db)",
 	)
-	server, err := shortener.NewWebappServer(*backendServerAddr)
+	flag.Parse()
+	server, err := shortener.NewWebappServer(*backendServerHost)
 	if err != nil {
 		log.Fatalf("Error starting server: %s\n", err.Error())
 	}
