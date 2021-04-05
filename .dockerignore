@@ -1,0 +1,10 @@
+*.exe
+__debug*
+debug.test
+*.tfstate*
+sensitive.auto.tfvars
+badger-db
+
+.vscode
+.terraform
+/bin

@@ -63,9 +63,9 @@ type CacheServer struct {
 	ks         KeyStack
 }
 
-func NewCacheServer(memcacheHost, dbServerHost string, reserveAmt uint32) (*CacheServer, error) {
+func NewCacheServer(memcachedHost, dbServerHost string, reserveAmt uint32) (*CacheServer, error) {
 	ret := &CacheServer{
-		mc:     memcache.New(memcacheHost),
+		mc:     memcache.New(memcachedHost),
 		client: &http.Client{},
 		mux:    http.NewServeMux(),
 

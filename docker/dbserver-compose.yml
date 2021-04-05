@@ -1,0 +1,9 @@
+services:
+  dbserver:
+    image: amkh4n/url-shortener-unity-server-generic:latest
+    ports:
+      - "${PORT}:${PORT}"
+    volumes: 
+      - ./badger-db:/badger-db
+    entrypoint: /url-shortener-unity/bin/dbserver -port=${PORT} -dbPath=/badger-db
+    restart: unless-stopped

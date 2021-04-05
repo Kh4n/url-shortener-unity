@@ -17,11 +17,11 @@ type WebappServer struct {
 	backendServer string
 }
 
-func NewWebappServer(backendServerHost string) (*WebappServer, error) {
+func NewWebappServer(webDir, backendServerHost string) (*WebappServer, error) {
 	ret := &WebappServer{
 		mux:    http.NewServeMux(),
 		client: &http.Client{},
-		home:   http.FileServer(http.Dir("./web")),
+		home:   http.FileServer(http.Dir(webDir)),
 
 		backendServer: fmt.Sprintf("http://%s", backendServerHost),
 	}

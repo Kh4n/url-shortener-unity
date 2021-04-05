@@ -15,8 +15,11 @@ func main() {
 	backendServerHost := flag.String(
 		"backendServerHost", "localhost:8081", "the host of the backend server (cache or db)",
 	)
+	webDir := flag.String(
+		"webDir", "./web", "location of web directory",
+	)
 	flag.Parse()
-	server, err := shortener.NewWebappServer(*backendServerHost)
+	server, err := shortener.NewWebappServer(*webDir, *backendServerHost)
 	if err != nil {
 		log.Fatalf("Error starting server: %s\n", err.Error())
 	}

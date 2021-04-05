@@ -1,0 +1,8 @@
+services:
+  webapp:
+    image: amkh4n/url-shortener-unity-server-generic:latest
+    ports:
+      - "${PORT}:${PORT}"
+    entrypoint: "/url-shortener-unity/bin/webappserver 
+    -port=${PORT} -backendServerHost=${BACKEND} -webDir=/url-shortener-unity/web"
+    restart: unless-stopped

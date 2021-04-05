@@ -8,11 +8,11 @@ import (
 )
 
 func main() {
-	memcacheHost := flag.String(
-		"memcacheHost", "localhost:11211", "the host of the memcached instance",
+	memcachedHost := flag.String(
+		"memcachedHost", "localhost:11211", "the host of the memcached instance",
 	)
-	mainServerHost := flag.String(
-		"mainServerHost", "localhost:8082", "the host of the main server",
+	dbServerHost := flag.String(
+		"dbServerHost", "localhost:8082", "the host of the db server",
 	)
 	port := flag.Int(
 		"port", 8081, "port to run this server on",
@@ -29,7 +29,7 @@ func main() {
 	}
 
 	server, err := shortener.NewCacheServer(
-		*memcacheHost, *mainServerHost, uint32(*reserveAmt),
+		*memcachedHost, *dbServerHost, uint32(*reserveAmt),
 	)
 	if err != nil {
 		log.Fatalf("Error starting cache server: %s\n", err.Error())
