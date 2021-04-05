@@ -71,22 +71,6 @@ resource "aws_security_group" "allow_web" {
     cidr_blocks = ["0.0.0.0/0"]
   }
 }
-
-# resource "aws_network_interface" "net_int" {
-#   subnet_id       = aws_subnet.subnet.id
-#   private_ips     = ["10.0.1.1${count.index}"]
-#   security_groups = [aws_security_group.allow_web.id, aws_security_group.allow_misc.id]
-#   count           = 3
-# }
-
-# resource "aws_eip" "eip" {
-#   vpc                       = true
-#   network_interface         = aws_network_interface.net_int[count.index].id
-#   associate_with_private_ip = "10.0.1.1${count.index}"
-#   depends_on                = [aws_internet_gateway.gw]
-#   count                     = 3
-# }
-
 resource "aws_instance" "servers" {
   ami           = "ami-05d72852800cbf29e"
   instance_type = "t2.micro"

@@ -4,7 +4,7 @@ If you want to run this locally, the easiest way is:
 ```
 docker-compose -f docker/run-local-compose.yml up
 ```
-Visit `http://localhost:8080` in your browser to use it. Ensure you have this port free.
+Visit http://localhost:8080 in your browser to use it. Ensure you have this port free.
 It will say "Unable to connect to url" a few time in the console; this is normal, it takes a second for all the
 servers to spin up and get connected
 
@@ -17,7 +17,7 @@ go build -o ./bin/cacheserver ./go/servers/cache/main.go
 go build -o ./bin/webappserver ./go/servers/webapp/main.go
 ./bin/dbserver & ./bin/cacheserver & ./bin/webappserver
 ```
-Visit `http://localhost:8080` in your browser to use it.
+Visit http://localhost:8080 in your browser to use it.
 Ensure ports `8080`, `8081`, and `8082` are free or use the `-port=<num>` flag to set ports for each server, as well as setting the appropriate hosts.
 Use the `-h` flag for help.
 
