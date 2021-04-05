@@ -6,7 +6,7 @@ docker-compose -f docker/run-local-compose.yml up
 ```
 Visit http://localhost:8080 in your browser to use it. Ensure you have this port free.
 It will say "Unable to connect to url" a few time in the console; this is normal, it takes a second for all the
-servers to spin up and get connected
+servers to spin up and get connected.
 
 If you do not want to use docker, ensure you have go installed and then run:
 ```
@@ -30,11 +30,11 @@ terraform apply
 And follow the prompts. This will create 3 t2.micro servers, so be sure to call terraform destroy when finished.
 
 I have also deployed this project to http://3.142.135.164/ for the time being. You should be able to use the application there.
-Be sure to type the full url and protocol, eg: `http://google.com`
+Be sure to type the full url and protocol, eg: `http://google.com`.
 
 # Description, methodologies, etc.
 Overall this was an interesting project for me. I did not expect such a simple application to have a vast number of viable approaches.
-Here I will outline my approach, as well as what I would recommend for various levels of scale
+Here I will outline my approach, as well as what I would recommend for various levels of scale.
 
 ## Basics
 Let's look at the problem further. The explicit requirement are:
@@ -48,7 +48,6 @@ There are also some implicit requirements:
 Number 2 is a little ambiguous as different people have different notions of privacy.
 For me, all this meant was that if a user creates a shortened url, they can at least expect that some nefarious user cannot trivially access it.
 It would be unreasonable to expect that the url have some additional layer of security without at least requesting such a feature first.
-I will go into more detail on this later as well.
 
 ## Approach
 The big problem we need to solve can essentially be boiled down to two things
@@ -56,7 +55,7 @@ The big problem we need to solve can essentially be boiled down to two things
 2. We need some way to generate keys
 
 There are many ways to accomplish the key value store. I will highlight a few:
-- You can use a simple persistent key-value storage application, and then apply a rendezvous hashing scheme to distribute the storage among nodes.
+- You can use a simple persistent key-value storage application, and then apply a rendezvous hashing scheme to distribute the storage among nodes
   This is important when you are dealing with a very large number of urls
 - You can go all out and use a sharding database like Apache Cassandra. This is way overkill, but will be quite reliable as you are using a well known software package
 
@@ -102,7 +101,7 @@ A more sophisticated setup to serve more users could be:
 ![Cache servers and Load Balancers](./images/cache_structure.png)
 
 This is the setup I implemented, save for the load balancers and sharding. This should operate very well at the intranational/region level.
-You can easily spin up a large number of cache servers to improve performance significantly.
+You can easily spin up a large number of cache servers to improve latency significantly.
 
 To operate at the global level, there are a few options. You can try to spin up cache servers in regions overseas, but this is not a long term solution
 
@@ -123,6 +122,8 @@ For my implementation I used:
   - Badger-DB for the key value store
     - Native Golang implementation keeps things simple
     - Fast and proven for large (terabyte) level data
+  - Memcached for the cache server key-value store
+    - Only need a simple key-value store, and memcached is very simple, fast, and easy to use
 - Deployment:
   - Terraform for provisioning
     - This is what was mentioned was used at Unity, and I also quite like it. Overall it was a good experience.
