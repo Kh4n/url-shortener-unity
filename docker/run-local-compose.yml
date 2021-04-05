@@ -1,0 +1,10 @@
+services:
+  all:
+    image: amkh4n/url-shortener-unity-run-local:latest
+    ports:
+      - "8080:8080"
+    restart: unless-stopped
+  memcached:
+    image: memcached
+    entrypoint: memcached --port=11211
+    restart: unless-stopped
