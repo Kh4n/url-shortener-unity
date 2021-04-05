@@ -1,8 +1,11 @@
 services:
   all:
-    image: amkh4n/url-shortener-unity-run-local:latest
+    image: amkh4n/url-shortener-unity-server-generic:latest
     ports:
       - "8080:8080"
+    entrypoint: 'bash -c "/url-shortener-unity/bin/dbserver &
+    /url-shortener-unity/bin/cacheserver -memcachedHost=memcached:11211 &
+    /url-shortener-unity/bin/webappserver -webDir=/url-shortener-unity/web"'
     restart: unless-stopped
   memcached:
     image: memcached
