@@ -5,6 +5,9 @@ import (
 	"log"
 	"net/http"
 	"net/url"
+	"os"
+	"os/signal"
+	"syscall"
 )
 
 // simple server that either forwards requests to a backend
@@ -42,8 +45,23 @@ func NewWebappServer(webDir, backendServerHost string) (*WebappServer, error) {
 }
 
 func (ws *WebappServer) Start(port uint) error {
+	c := make(chan os.Signal)
+	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
+	go func() {
+		<-c
+		err := ws.Close()
+		if err != nil {
+			os.Exit(1)
+		}
+		os.Exit(0)
+	}()
 	log.Printf("Starting webapp server on :%d\n", port)
 	return http.ListenAndServe(fmt.Sprintf(":%d", port), ws.mux)
+}
+
+func (ws *WebappServer) Close() error {
+	log.Println("Closed webapp server successfully")
+	return nil
 }
 
 func (ws *WebappServer) redirect(w http.ResponseWriter, r *http.Request) {

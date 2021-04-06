@@ -7,7 +7,10 @@ import (
 	"log"
 	"net/http"
 	"net/url"
+	"os"
+	"os/signal"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/bradfitz/gomemcache/memcache"
@@ -85,12 +88,39 @@ func NewCacheServer(memcachedHost, dbServerHost string, reserveAmt uint32) (*Cac
 	if err != nil {
 		return nil, fmt.Errorf("unable to connect to main server: %s", err)
 	}
+	err = nil
+	for i := 0; i < 10; i++ {
+		err = ret.mc.Ping()
+		if err == nil {
+			break
+		}
+		log.Printf("Unable to connect to cache server, retrying in 1s")
+		time.Sleep(1 * time.Second)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("unable to connect to memcached server: %s", err)
+	}
 	return ret, nil
 }
 
 func (cs *CacheServer) Start(port uint) error {
+	c := make(chan os.Signal)
+	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
+	go func() {
+		<-c
+		err := cs.Close()
+		if err != nil {
+			os.Exit(1)
+		}
+		os.Exit(0)
+	}()
 	log.Printf("Starting cache server on :%d\n", port)
 	return http.ListenAndServe(fmt.Sprintf(":%d", port), cs.mux)
+}
+
+func (cs *CacheServer) Close() error {
+	log.Println("Closed cache server successfully")
+	return nil
 }
 
 func (cs *CacheServer) query(w http.ResponseWriter, r *http.Request) {

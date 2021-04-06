@@ -4,7 +4,10 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"os"
+	"os/signal"
 	"strconv"
+	"syscall"
 )
 
 const (
@@ -41,10 +44,26 @@ func NewMainServer(dbLocation string) (*MainServer, error) {
 }
 
 func (ms *MainServer) Close() error {
-	return ms.store.Close()
+	err := ms.store.Close()
+	if err != nil {
+		log.Printf("Error closing server: %s\n", err.Error())
+		return err
+	}
+	log.Println("Closed dbserver successfully")
+	return nil
 }
 
 func (ms *MainServer) Start(port uint) error {
+	c := make(chan os.Signal)
+	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
+	go func() {
+		<-c
+		err := ms.Close()
+		if err != nil {
+			os.Exit(1)
+		}
+		os.Exit(0)
+	}()
 	log.Printf("Starting db server on :%d\n", port)
 	return http.ListenAndServe(fmt.Sprintf(":%d", port), ms.mux)
 }

@@ -27,12 +27,12 @@ cd terraform
 terraform init
 terraform apply
 ```
-And follow the prompts. This will create 3 t2.micro servers, so be sure to call terraform destroy when finished.
+And follow the prompts. This will create 3 t2.micro servers, so be sure to call `terraform destroy` when finished.
 
 I have also deployed this project to http://3.142.135.164/ for the time being. You should be able to use the application there.
 Be sure to type the full url and protocol, eg: `http://google.com`.
 
-# Description, methodologies, etc.
+# Design
 Overall this was an interesting project for me. I did not expect such a simple application to have a vast number of viable approaches.
 Here I will outline my approach, as well as what I would recommend for various levels of scale.
 
@@ -55,14 +55,15 @@ The big problem we need to solve can essentially be boiled down to two things
 2. We need some way to generate keys
 
 There are many ways to accomplish the key value store. I will highlight a few:
-- You can use a simple persistent key-value storage application, and then apply a rendezvous hashing scheme to distribute the storage among nodes
+- You can use a simple persistent key-value storage application, and then apply a rendezvous hashing scheme to distribute the storage among nodes.
   This is important when you are dealing with a very large number of urls
 - You can go all out and use a sharding database like Apache Cassandra. This is way overkill, but will be quite reliable as you are using a well known software package
 
 To generate keys, there are also many approaches. Here are three that I found interesting:
 - Generate keys at the main database. This has the benefit of being simple, fast, and easy to understand. The downsides of this are hard to see.
   If you are using a key generating service based on randomness with a known period (eg. Mersenne Twister) you can confidently generate keys for (essentially) eternity
-  with almost no worries. However if you don't have such a scheme, then the next option is more flexible
+  with almost no worries. However if you don't have such a scheme, then the next option is more flexible.
+  Additionally, if you have multiple main servers, having a separate key generation service is much more sustainable
 - Use a separate key generation service. This has an added layer of flexibility, at the cost of some data duplication and complexity.
   However, the complexity is not entirely unfounded: adding additional layers such as caching can be made easier with a separate key generation service.
   In general, regardless of which of these two approaches you choose, key generation should be kept as isolated as possible to make it easy to add additional features
@@ -83,7 +84,7 @@ I have kept the key generation isolated, and as a result have also added a cachi
 Thankfully, you can always add approaches like rendezvous hashing/consistent hashing in the future if need be, with little to no downtime.
 
 My caching layer can serve both redirect requests and url creation requests.
-I do this by having the cache servers ask the main server for some number of keys beforehand (eg. 1000) which expire in 24 hours.
+I do this by having the cache servers ask the main server for some number of keys when they run out of keys to provide which expire in 24 hours.
 Then, to fulfill a request, the cache server can immediately provide a shortened url and then forward the request to main server asynchronously.
 To the user, they will see the update immediately and can even share it to some people immediately. After the request hits the main server,
 everyone will be able to see use the shortened URL.
@@ -110,8 +111,8 @@ throughout a region without needing to duplicate the main database overseas as w
 I believe that given typical url shortening usage is in a burst: a user creates a shortened link, shares it, and it gets used a bunch of times.
 After a while, the link dies out and is either never used or only occasionally. For this sort of usage, this setup may be good enough.
 
-However, if the overseas usage is very high, you can duplicate the main server there, add some cache servers, and have them communicate with each other to sync
-the new urls. This is expensive, but is indeed the most robust way to handle very high load.
+However, if the overseas usage is very high, you can duplicate the main server there, add some cache servers, and have the main servers communicate with each other to sync the new urls.
+This is expensive, but is indeed the most robust way to handle very high load.
 
 ## Implementation details
 For my implementation I used:
@@ -129,13 +130,13 @@ For my implementation I used:
     - This is what was mentioned was used at Unity, and I also quite like it. Overall it was a good experience.
       I had a few issues with the state not being cached correctly, as well as some misguided online tutorials, but I made it work
   - Docker for deploying to the server
-    - I originally planned to use Ansible, but it does not run on Windows and setting it up/using it was a large hassle
+    - I originally planned to use Ansible, but it does not run on Windows and setting it up/using it was a large hassle.
       This is not insurmountable of course, but I looked into other options
     - While looking, I did some research on how large companies deploy code, and I found this very nice article: https://hackernoon.com/configuration-management-is-an-antipattern-e677e34be64c
     - To summarize, it basically said that using images was the most robust and easiest way to do deployments
-    - After using docker it became immediately obvious that this was the right way to go.
+    - After using docker it became immediately obvious that this was the right direction to go.
       I could easily deploy the code with almost no hassle as far as making it run remotely
-    - This is not exactly the best way: the most robust method is to create full machine images (eg. Amazon Machine Images using a tool like packer)
+    - Docker itself is not exactly the best way: the most robust method is to create full machine images (eg. Amazon Machine Images using a tool like packer)
     - This is because docker usage is not free: there is a performance hit, and docker can crash and interfere with database data recovery
     - I went with docker anyway for two reasons:
       1. The information on this subject was highly contradictory and it did not seem clear cut which way to go
