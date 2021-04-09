@@ -5,7 +5,7 @@ If you want to run this locally, the easiest way is:
 docker-compose -f docker/run-local-compose.yml up
 ```
 Visit http://localhost:8080 in your browser to use it. Ensure you have this port free.
-It will say "Unable to connect to url" a few time in the console; this is normal, it takes a second for all the
+It will say "Unable to connect to url" a few times in the console; this is normal, it takes a second for all the
 servers to spin up and get connected.
 
 If you do not want to use docker, ensure you have go installed and then run:
@@ -29,7 +29,8 @@ terraform apply
 ```
 And follow the prompts. This will create 3 t2.micro servers, so be sure to call `terraform destroy` when finished.
 
-I have also deployed this project to http://3.142.135.164/ for the time being. You should be able to use the application there.
+~~I have also deployed this project to http://3.142.135.164/ for the time being. You should be able to use the application there.~~
+It is currently offline.
 Be sure to type the full url and protocol, eg: `http://google.com`.
 
 # Design
@@ -108,7 +109,7 @@ To operate at the global level, there are a few options. You can try to spin up 
 
 Another idea is to have the cache servers communicate to each other as a swarm. This way, each server gets very high utilization and changes can be spread
 throughout a region without needing to duplicate the main database overseas as well. It is very difficult to say whether this approach is sufficient.
-I believe that given typical url shortening usage is in a burst: a user creates a shortened link, shares it, and it gets used a bunch of times.
+I believe that typical url shortening usage is in a burst: a user creates a shortened link, shares it, and it gets used a bunch of times.
 After a while, the link dies out and is either never used or only occasionally. For this sort of usage, this setup may be good enough.
 
 However, if the overseas usage is very high, you can duplicate the main server there, add some cache servers, and have the main servers communicate with each other to sync the new urls.
