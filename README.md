@@ -29,8 +29,7 @@ terraform apply
 ```
 And follow the prompts. This will create 3 t2.micro servers, so be sure to call `terraform destroy` when finished.
 
-~~I have also deployed this project to http://3.142.135.164/ for the time being. You should be able to use the application there.~~
-It is currently offline.
+I have also deployed this project to http://18.188.59.100 for the time being. You should be able to use the application there.
 Be sure to type the full url and protocol, eg: `http://google.com`.
 
 # Design
