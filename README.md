@@ -32,6 +32,7 @@ And follow the prompts. This will create 3 t2.micro servers, so be sure to call 
 
 ~~I have also deployed this project to http://18.188.59.100 for the time being. You should be able to use the application there.~~
 
+The server is offline.
 # Design
 Overall this was an interesting project for me. I did not expect such a simple application to have a vast number of viable approaches.
 Here I will outline my approach, as well as what I would recommend for various levels of scale.
