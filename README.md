@@ -7,6 +7,7 @@ docker-compose -f docker/run-local-compose.yml up
 Visit http://localhost:8080 in your browser to use it. Ensure you have this port free.
 It will say "Unable to connect to url" a few times in the console; this is normal, it takes a second for all the
 servers to spin up and get connected.
+Be sure to type the full url and protocol when shortening, eg: `http://google.com`.
 
 If you do not want to use docker, ensure you have go installed and then run:
 ```
@@ -29,8 +30,7 @@ terraform apply
 ```
 And follow the prompts. This will create 3 t2.micro servers, so be sure to call `terraform destroy` when finished.
 
-I have also deployed this project to http://18.188.59.100 for the time being. You should be able to use the application there.
-Be sure to type the full url and protocol, eg: `http://google.com`.
+~~I have also deployed this project to http://18.188.59.100 for the time being. You should be able to use the application there.~~
 
 # Design
 Overall this was an interesting project for me. I did not expect such a simple application to have a vast number of viable approaches.

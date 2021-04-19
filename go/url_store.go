@@ -127,9 +127,8 @@ func (store *URLStore) Reserve(num int) ([]string, error) {
 			for _, err := txn.Get(key); err != badger.ErrKeyNotFound; {
 				base62Encode(genKey(), &key)
 			}
-			e := badger.NewEntry(key, []byte(""))
 			// set an expiration date so that we don't waste keys if a cache server goes down
-			e.ExpiresAt = uint64(time.Now().Add(RESERVE_EXPIRY).Unix())
+			e := badger.NewEntry(key, []byte("")).WithTTL(RESERVE_EXPIRY)
 			err := txn.SetEntry(e)
 			if err != nil {
 				return err
